@@ -1,0 +1,132 @@
+# apps/accounts/models.py
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.utils import timezone
+
+# Custom User Manager
+class UserManager(BaseUserManager):
+    def create_user(self, username, email, password=None, **extra_fields):
+        if not username:
+            raise ValueError('Username is required')
+        if not email:
+            raise ValueError('Email is required')
+        
+        email = self.normalize_email(email)
+        user = self.model(username=username, email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, username, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(username, email, password, **extra_fields)
+
+
+# Your real tbl_users table
+class User(AbstractBaseUser, PermissionsMixin):
+    id = models.AutoField(primary_key=True)
+    telephone = models.CharField(max_length=20)
+    email = models.CharField(max_length=100, unique=True)
+    full_name = models.CharField(max_length=100)
+    username = models.CharField(max_length=100, unique=True)
+    reset_token = models.CharField(max_length=20, null=True, blank=True)
+    reset_expiry = models.DateTimeField(null=True, blank=True)
+    password = models.CharField(max_length=100)
+    created_at = models.DateTimeField()
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    # Expose Django auth attributes as properties so authentication backends
+    # work correctly against the legacy `tbl_users` table without altering schema.
+    @property
+    def last_login(self):
+        # legacy table doesn't track Django's last_login; return None
+        return None
+
+    @property
+    def is_active(self):
+        # treat a user as active when `deleted_at` is null
+        return self.deleted_at is None
+
+    @property
+    def is_staff(self):
+        # legacy schema doesn't have staff flag; default to False
+        return False
+
+    @property
+    def is_superuser(self):
+        # legacy schema doesn't have superuser flag; default to False
+        return False
+
+    objects = UserManager()
+
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email', 'full_name',]
+
+    class Meta:
+        db_table = 'tbl_users'
+        managed = False   # ← CRITICAL: Django never touches this table
+        app_label = 'accounts'
+
+    def __str__(self):
+        return self.username
+
+
+# Your real roles & permissions
+class Role(models.Model):
+    id = models.IntegerField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField()
+    modified_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tbl_roles'
+        managed = False
+        app_label = 'accounts'
+
+    def __str__(self):
+        return self.name
+
+
+class Permission(models.Model):
+    id = models.IntegerField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField()
+    modified_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tbl_permissions'
+        managed = False
+        app_label = 'accounts'
+
+
+class UserRole(models.Model):
+    id = models.IntegerField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, db_column='role_id')
+    created_at = models.DateTimeField()
+    modified_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tbl_user_roles'
+        managed = False
+        app_label = 'accounts'
+        unique_together = ('user', 'role')
+
+
+class RolePermission(models.Model):
+    id = models.IntegerField(primary_key=True)
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, db_column='role_id')
+    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, db_column='permission_id')
+    created_at = models.DateTimeField()
+    modified_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tbl_role_permissions'
+        managed = False
+        app_label = 'accounts'

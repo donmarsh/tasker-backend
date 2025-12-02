@@ -1,0 +1,188 @@
+{
+  "info": {
+    "name": "Tasker API - Full Backend",
+    "description": "Complete Postman collection for your Django + MySQL + RBAC backend\nLogin → httpOnly cookies → All CRUD endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register New User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"johndoe\",\n  \"email\": \"john@example.com\",\n  \"full_name\": \"John Doe\",\n  \"telephone\": \"+254700000000\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register", ""]
+            }
+          }
+        },
+        {
+          "name": "Login (Sets httpOnly Cookies)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Login successful\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var json = pm.response.json();",
+                  "pm.collectionVariables.set(\"current_user\", JSON.stringify(json.user));",
+                  "console.log(\"Logged in as:\", json.user.username);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"johndoe\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login", ""]
+            }
+          }
+        },
+        {
+          "name": "Logout (Clears Cookies)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          " name": "List My Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/projects/?ordering=-created_at",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects", ""],
+              "query": [{ "key": "ordering", "value": "-created_at" }]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Client Website\",\n  \"project_start_date\": \"2025-04-01T00:00:00Z\",\n  \"project_end_date\": \"2025-06-30T00:00:00Z\",\n  \"project_status_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/projects/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Single Project",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/projects/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects", "1", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Project (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Project Name\",\n  \"project_status_id\": 3\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/projects/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects", "1", ""]
+            }
+          }
+        },
+        {
+          "name": "Delete Project (Soft)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/projects/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects", "1", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "List My Tasks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/tasks/?project=1&ordering=-created_at",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", ""],
+              "query": [
+                { "key": "project", "value": "1" },
+                { "key": "ordering", "value": "-created_at" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Design homepage\",\n  \"description\": \"Create mockups in Figma\",\n  \"project_id\": 1,\n  \"status_id\": 1,\n  \"assignee_id\": 5,\n  \"deadline\": \"2025-04-15T00:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tasks/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", ""]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "description": "Change to your production URL later"
+    }
+  ]
+}
