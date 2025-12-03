@@ -13,6 +13,9 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.http import JsonResponse
 User = get_user_model()
+from rest_framework import generics
+from .serializers import UserSerializer
+from .permissions import IsAdminRole
 class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
 
@@ -148,3 +151,19 @@ def csrf_view(request):
     # ensure_csrf_cookie will set the CSRF cookie; return the token in body
     from django.middleware.csrf import get_token
     return JsonResponse({"detail": "CSRF cookie set", "csrfToken": get_token(request)})
+
+
+class UserList(generics.ListAPIView):
+    """List users. Requires admin role."""
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        # Only non-deleted users
+        return User.objects.filter(deleted_at__isnull=True)
+
+
+class UserDetail(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    serializer_class = UserSerializer
+    queryset = User.objects.filter(deleted_at__isnull=True)

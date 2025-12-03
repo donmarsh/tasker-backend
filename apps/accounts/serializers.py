@@ -78,3 +78,17 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['user_id'] = user.id
         token['full_name'] = user.full_name
         return token
+
+
+class UserSerializer(serializers.ModelSerializer):
+    roles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'full_name', 'telephone', 'roles']
+
+    def get_roles(self, obj):
+        try:
+            return [ur.role.name for ur in obj.userrole_set.filter(deleted_at__isnull=True)]
+        except Exception:
+            return []

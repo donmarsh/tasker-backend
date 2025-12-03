@@ -23,11 +23,11 @@ class TaskStatus(models.Model):
 
 
 class Task(models.Model):
-    id = models.IntegerField(primary_key=True)
+    id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=100)
     description = models.CharField(max_length=500)
     deadline = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 

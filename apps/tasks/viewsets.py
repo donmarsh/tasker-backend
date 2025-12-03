@@ -6,6 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Task
 from .serializers import TaskSerializer
 from .permissions import IsProjectMemberOrReadOnly
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status as http_status
+from apps.tasks.models import TaskStatus
 
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
@@ -57,6 +61,28 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Legacy `tbl_tasks` has no `created_by` column, so just save the
         # task as provided. The frontend should set `assignee`/`project`.
         serializer.save()
+
+    @action(detail=True, methods=['patch'], url_path='status')
+    def status(self, request, pk=None):
+        """Patch-only endpoint to update a task's status.
+
+        Expects JSON body `{ "status_id": <int> }` and returns the
+        updated Task representation. Permission checks are applied
+        via the viewset's `permission_classes`.
+        """
+        task = self.get_object()
+        status_id = request.data.get('status_id')
+        if status_id is None:
+            return Response({'detail': 'status_id is required'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        try:
+            status_obj = TaskStatus.objects.get(pk=status_id)
+        except TaskStatus.DoesNotExist:
+            return Response({'detail': 'Invalid status_id'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        task.status = status_obj
+        task.save(update_fields=['status', 'modified_at'])
+        return Response(TaskSerializer(task, context={'request': request}).data, status=http_status.HTTP_200_OK)
 
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     # support filtering by related project id via `?project_id=<id>`
