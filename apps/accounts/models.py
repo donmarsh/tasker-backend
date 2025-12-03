@@ -32,16 +32,29 @@ class User(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(max_length=100, unique=True)
     reset_token = models.CharField(max_length=20, null=True, blank=True)
     reset_expiry = models.DateTimeField(null=True, blank=True)
-    password = models.CharField(max_length=100)
+    password = models.CharField(max_length=256)
     created_at = models.DateTimeField()
     deleted_at = models.DateTimeField(null=True, blank=True)
     modified_at = models.DateTimeField(auto_now=True)
 
-   
-    last_login = None
-    is_active = None
-    is_staff = None
-    is_superuser = None
+    # Expose auth attributes as properties so Django's authentication
+    # treats legacy rows correctly (without changing DB schema).
+    def _last_login(self):
+        return None
+
+    def _is_active(self):
+        return self.deleted_at is None
+
+    def _is_staff(self):
+        return False
+
+    def _is_superuser(self):
+        return False
+
+    last_login = property(_last_login)
+    is_active = property(_is_active)
+    is_staff = property(_is_staff)
+    is_superuser = property(_is_superuser)
 
     objects = UserManager()
 

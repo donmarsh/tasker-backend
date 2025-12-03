@@ -12,10 +12,46 @@ class TaskViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsProjectMemberOrReadOnly]
 
     def get_queryset(self):
-        return Task.objects.filter(
-            deleted_at__isnull=True,
-            project__created_by=self.request.user
-        ).select_related('status', 'assignee', 'project')
+        # Determine user identity and role. If the user is admin, return all
+        # non-deleted tasks. If a normal user, only return tasks assigned to
+        # them. Prefer `request.user` but fall back to JWT token payload.
+        user = getattr(self.request, 'user', None)
+        owner_id = None
+        is_admin = False
+
+        if user and getattr(user, 'is_authenticated', False):
+            owner_id = getattr(user, 'id', None)
+            try:
+                is_admin = user.userrole_set.filter(deleted_at__isnull=True, role__name__iexact='admin').exists()
+            except Exception:
+                is_admin = False
+        else:
+            token = getattr(self.request, 'auth', None)
+            if token is not None:
+                # token may behave like a dict or have `.payload`
+                payload = None
+                if isinstance(token, dict):
+                    payload = token
+                else:
+                    payload = getattr(token, 'payload', None) or {}
+
+                owner_id = payload.get('user_id')
+                roles = payload.get('roles') or []
+                if isinstance(roles, (list, tuple)):
+                    is_admin = any(str(r).lower() == 'admin' for r in roles)
+                elif isinstance(roles, str):
+                    is_admin = roles.lower() == 'admin'
+
+        base_qs = Task.objects.filter(deleted_at__isnull=True).select_related('status', 'assignee', 'project')
+
+        if is_admin:
+            return base_qs
+
+        if owner_id is not None:
+            return base_qs.filter(assignee__id=owner_id)
+
+        # No identity info -> return empty queryset to avoid leaking tasks.
+        return Task.objects.none()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

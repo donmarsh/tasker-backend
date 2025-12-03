@@ -76,19 +76,24 @@ class MyTokenObtainPairView(TokenObtainPairView):
         if user is not None:
             roles = [ur.role.name for ur in user.userrole_set.filter(deleted_at__isnull=True)]
 
+        # Ensure `user` in response is always an object (not null) so clients
+        # that access `user.username` won't throw `Cannot read properties of
+        # undefined` if the field is missing.
+        user_obj = {
+            "id": user.id if user is not None else None,
+            "username": user.username if user is not None else "",
+            "email": user.email if user is not None else "",
+            "full_name": user.full_name if user is not None else "",
+            "roles": roles
+        }
+
         res = Response({
             "message": "Login successful",
             "tokens": {
                 "access": tokens.get('access'),
                 "refresh": tokens.get('refresh')
             },
-            "user": {
-                "id": user.id if user else None,
-                "username": user.username if user else None,
-                "email": user.email if user else None,
-                "full_name": user.full_name if user else None,
-                "roles": roles
-            }
+            "user": user_obj
         }, status=status.HTTP_200_OK)
 
         if tokens.get('access'):
