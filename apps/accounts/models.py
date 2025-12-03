@@ -37,27 +37,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     deleted_at = models.DateTimeField(null=True, blank=True)
     modified_at = models.DateTimeField(auto_now=True)
 
-    # Expose Django auth attributes as properties so authentication backends
-    # work correctly against the legacy `tbl_users` table without altering schema.
-    @property
-    def last_login(self):
-        # legacy table doesn't track Django's last_login; return None
-        return None
-
-    @property
-    def is_active(self):
-        # treat a user as active when `deleted_at` is null
-        return self.deleted_at is None
-
-    @property
-    def is_staff(self):
-        # legacy schema doesn't have staff flag; default to False
-        return False
-
-    @property
-    def is_superuser(self):
-        # legacy schema doesn't have superuser flag; default to False
-        return False
+   
+    last_login = None
+    is_active = None
+    is_staff = None
+    is_superuser = None
 
     objects = UserManager()
 

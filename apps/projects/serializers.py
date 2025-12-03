@@ -1,6 +1,7 @@
 # apps/projects/serializers.py
 from rest_framework import serializers
 from .models import Project, ProjectStatus
+from rest_framework import serializers
 
 class ProjectStatusSerializer(serializers.ModelSerializer):
     class Meta:
@@ -17,12 +18,20 @@ class ProjectSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    # include related tasks when returning a single project
+    tasks = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
         fields = [
             'id', 'name', 'project_start_date', 'project_end_date',
             'created_at', 'modified_at', 'deleted_at',
-            'project_status', 'project_status_id', 'created_by'
+            'project_status', 'project_status_id', 'created_by', 'tasks'
         ]
         read_only_fields = ['created_at', 'modified_at', 'deleted_at', 'created_by']
+
+    def get_tasks(self, obj):
+        # import here to avoid circular imports at module load
+        from apps.tasks.serializers import TaskSerializer
+        tasks_qs = obj.tasks.filter(deleted_at__isnull=True)
+        return TaskSerializer(tasks_qs, many=True).data
