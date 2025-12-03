@@ -56,10 +56,13 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # CSRF middleware removed to disable global CSRF protection
+    # 'django.middleware.csrf.CsrfViewMiddleware',
+    'apps.accounts.middleware.CookieToHeaderJWTMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -133,6 +136,18 @@ USE_TZ = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
 }
+
+# CORS settings: allow requests from the frontend running on localhost:3000
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+]
+# Allow cookies (JWT in HttpOnly cookies) to be sent cross-origin
+CORS_ALLOW_CREDENTIALS = True
+
+# Trust the frontend origin for CSRF (useful when sending cookies)
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:3000',
+]
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),

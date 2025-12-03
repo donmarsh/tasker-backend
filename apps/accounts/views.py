@@ -8,6 +8,10 @@ from .serializers import MyTokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.http import JsonResponse
 User = get_user_model()
 class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
@@ -103,8 +107,44 @@ class MyTokenObtainPairView(TokenObtainPairView):
         return res
 
 
+@api_view(['POST'])
 def logout_view(request):
-    response = Response({"message": "Logged out"})
+    """Logout endpoint.
+
+    Accepts requests authenticated either via Authorization header or via
+    `access_token` cookie. If a cookie is present we attempt to authenticate
+    the request using it before clearing cookies.
+    """
+    user = getattr(request, 'user', None)
+
+    # If not authenticated via headers, try cookie-based token
+    if not (user and getattr(user, 'is_authenticated', False)):
+        token = request.COOKIES.get('access_token')
+        if token:
+            # Temporarily set Authorization header so JWTAuthentication can read it
+            request.META['HTTP_AUTHORIZATION'] = f'Bearer {token}'
+            try:
+                auth = JWTAuthentication()
+                auth_result = auth.authenticate(request)
+                if auth_result is not None:
+                    user, validated_token = auth_result
+                    request.user = user
+                else:
+                    return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            except Exception:
+                return Response({"detail": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+        else:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # At this point the request is authenticated (or we allowed cookie auth)
+    response = Response({"message": "Logged out"}, status=status.HTTP_200_OK)
     response.delete_cookie('access_token')
     response.delete_cookie('refresh_token')
     return response
+
+
+@ensure_csrf_cookie
+def csrf_view(request):
+    # ensure_csrf_cookie will set the CSRF cookie; return the token in body
+    from django.middleware.csrf import get_token
+    return JsonResponse({"detail": "CSRF cookie set", "csrfToken": get_token(request)})

@@ -15,8 +15,9 @@ class ProjectStatus(models.Model):
 
 
 class Project(models.Model):
-    id = models.IntegerField(primary_key=True)  # matches your int(11)
+    id = models.AutoField(primary_key=True)  # DB uses autoincrement
     name = models.CharField(max_length=100)
+    description = models.CharField(max_length=500)
     project_start_date = models.DateTimeField()
     project_end_date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -34,12 +35,15 @@ class Project(models.Model):
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='projects'
+        related_name='projects',
+        db_column='created_by'
     )
+    
 
     class Meta:
         db_table = 'tbl_projects'
         ordering = ['-created_at']
+        managed = False
 
     def __str__(self):
         return self.name

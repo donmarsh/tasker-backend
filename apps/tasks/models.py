@@ -27,7 +27,7 @@ class Task(models.Model):
     title = models.CharField(max_length=100)
     description = models.CharField(max_length=500)
     deadline = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField()
     modified_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
@@ -50,11 +50,9 @@ class Task(models.Model):
         related_name='tasks',
         db_column='project_id'
     )
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='created_tasks'
-    )
+    # Note: legacy `tbl_tasks` does not include a `created_by` column.
+    # We do not model it here to match the existing schema.
+
 
     class Meta:
         db_table = 'tbl_tasks'

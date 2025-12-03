@@ -8,7 +8,6 @@ class TaskStatusSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 class TaskSerializer(serializers.ModelSerializer):
-    created_by = serializers.ReadOnlyField(source='created_by.username')
     assignee = serializers.ReadOnlyField(source='assignee.username' if hasattr(serializers.ReadOnlyField, 'source') else 'assignee.username')
     project = serializers.ReadOnlyField(source='project.name')
     status = TaskStatusSerializer(read_only=True)
@@ -23,6 +22,6 @@ class TaskSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'status', 'status_id',
             'assignee', 'deadline', 'created_at', 'modified_at',
-            'deleted_at', 'project', 'created_by'
+            'deleted_at', 'project'
         ]
-        read_only_fields = ['created_at', 'modified_at', 'deleted_at', 'created_by']
+        read_only_fields = ['created_at', 'modified_at', 'deleted_at']

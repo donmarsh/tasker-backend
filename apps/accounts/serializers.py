@@ -67,4 +67,14 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
+        # Add roles and identifying claims so they appear in both
+        # refresh and access tokens created by the parent serializer.
+        try:
+            roles = [ur.role.name for ur in user.userrole_set.filter(deleted_at__isnull=True)]
+        except Exception:
+            roles = []
+        token['roles'] = roles
+        token['username'] = user.username
+        token['user_id'] = user.id
+        token['full_name'] = user.full_name
         return token

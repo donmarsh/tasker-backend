@@ -54,7 +54,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Task.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Legacy `tbl_tasks` has no `created_by` column, so just save the
+        # task as provided. The frontend should set `assignee`/`project`.
+        serializer.save()
 
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     # support filtering by related project id via `?project_id=<id>`
