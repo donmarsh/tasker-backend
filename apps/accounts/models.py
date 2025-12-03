@@ -30,6 +30,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.CharField(max_length=100, unique=True)
     full_name = models.CharField(max_length=100)
     username = models.CharField(max_length=100, unique=True)
+    # Single-role now stored on the users table as `role_id` FK
+    role = models.ForeignKey('Role', on_delete=models.SET_NULL, null=True, blank=True, db_column='role_id')
     reset_token = models.CharField(max_length=20, null=True, blank=True)
     reset_expiry = models.DateTimeField(null=True, blank=True)
     password = models.CharField(max_length=256)

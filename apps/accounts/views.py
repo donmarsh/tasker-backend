@@ -1,9 +1,10 @@
 # apps/accounts/views.py
+import logging
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import User, UserRole
+from .models import User
 from .serializers import MyTokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
@@ -13,9 +14,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.http import JsonResponse
 User = get_user_model()
+logger = logging.getLogger(__name__)
 from rest_framework import generics
 from .serializers import UserSerializer
 from .permissions import IsAdminRole
+from .serializers import RoleSerializer
+from apps.accounts.models import Role
 class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
 
@@ -46,16 +50,18 @@ class RegisterView(generics.CreateAPIView):
         )
         user.save()
 
-        # Add user role
+        # Assign role on the user (single-role model)
         role_id = request.data.get('role_id')
         if not role_id:
             role_id = 3
-        
-        UserRole.objects.create(
-            user=user,
-            role_id=role_id,
-            created_at=timezone.now()
-        )
+        try:
+            role_obj = Role.objects.get(pk=role_id)
+            user.role = role_obj
+            user.save(update_fields=['role'])
+            logger.info("Assigned role id=%s to new user id=%s", role_obj.id, user.id)
+        except Role.DoesNotExist:
+            # ignore invalid role id and leave role null
+            logger.warning("Role id=%s not found when creating user id=%s", role_id, getattr(user, 'id', None))
 
         return Response({
             "message": "User registered successfully",
@@ -79,9 +85,14 @@ class MyTokenObtainPairView(TokenObtainPairView):
         tokens = serializer.validated_data
         user = getattr(serializer, 'user', None)
 
-        roles = []
+        role_obj = None
         if user is not None:
-            roles = [ur.role.name for ur in user.userrole_set.filter(deleted_at__isnull=True)]
+            try:
+                r = getattr(user, 'role', None)
+                if r is not None and getattr(r, 'deleted_at', None) is None:
+                    role_obj = {"id": r.id, "role_name": r.name}
+            except Exception:
+                role_obj = None
 
         # Ensure `user` in response is always an object (not null) so clients
         # that access `user.username` won't throw `Cannot read properties of
@@ -91,7 +102,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
             "username": user.username if user is not None else "",
             "email": user.email if user is not None else "",
             "full_name": user.full_name if user is not None else "",
-            "roles": roles
+            "role": role_obj
         }
 
         res = Response({
@@ -163,7 +174,27 @@ class UserList(generics.ListAPIView):
         return User.objects.filter(deleted_at__isnull=True)
 
 
-class UserDetail(generics.RetrieveAPIView):
+class UserDetail(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
-    serializer_class = UserSerializer
     queryset = User.objects.filter(deleted_at__isnull=True)
+
+    def get_serializer_class(self):
+        # Use a write-capable serializer when updating, otherwise read-only
+        if self.request.method in ('PUT', 'PATCH'):
+            from .serializers import UserUpdateSerializer
+            return UserUpdateSerializer
+        return UserSerializer
+
+
+class RoleList(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    serializer_class = RoleSerializer
+
+    def get_queryset(self):
+        return Role.objects.filter(deleted_at__isnull=True)
+
+
+class RoleDetail(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    serializer_class = RoleSerializer
+    queryset = Role.objects.filter(deleted_at__isnull=True)

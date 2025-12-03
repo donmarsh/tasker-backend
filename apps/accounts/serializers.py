@@ -1,9 +1,12 @@
 # apps/accounts/serializers.py
+import logging
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
+from apps.accounts.models import Role
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -55,9 +58,16 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         if user:
             token = self.get_token(user)
-            # ensure extra claims are present on token (roles etc.)
-            roles = [ur.role.name for ur in user.userrole_set.filter(deleted_at__isnull=True)]
-            token['roles'] = roles
+            # ensure extra claim is present on token (single role object)
+            try:
+                r = getattr(user, 'role', None)
+                if r is not None and getattr(r, 'deleted_at', None) is None:
+                    role_obj = {'id': r.id, 'role_name': r.name}
+                else:
+                    role_obj = None
+            except Exception:
+                role_obj = None
+            token['role'] = role_obj
             token['username'] = user.username
             token['user_id'] = user.id
             token['full_name'] = user.full_name
@@ -70,10 +80,14 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Add roles and identifying claims so they appear in both
         # refresh and access tokens created by the parent serializer.
         try:
-            roles = [ur.role.name for ur in user.userrole_set.filter(deleted_at__isnull=True)]
+            r = getattr(user, 'role', None)
+            if r is not None and getattr(r, 'deleted_at', None) is None:
+                role_obj = {'id': r.id, 'role_name': r.name}
+            else:
+                role_obj = None
         except Exception:
-            roles = []
-        token['roles'] = roles
+            role_obj = None
+        token['role'] = role_obj
         token['username'] = user.username
         token['user_id'] = user.id
         token['full_name'] = user.full_name
@@ -81,14 +95,85 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    roles = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'full_name', 'telephone', 'roles']
+        fields = ['id', 'username', 'email', 'full_name', 'telephone', 'created_at', 'role']
 
-    def get_roles(self, obj):
+    def get_role(self, obj):
         try:
-            return [ur.role.name for ur in obj.userrole_set.filter(deleted_at__isnull=True)]
+            r = getattr(obj, 'role', None)
+            if r is not None and getattr(r, 'deleted_at', None) is None:
+                return {'id': r.id, 'role_name': r.name}
+            return None
         except Exception:
-            return []
+            return None
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    role_name = serializers.CharField(source='name')
+
+    class Meta:
+        model = Role
+        fields = ['id', 'role_name']
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    # Allow updating the user's role via `role_id` in requests.
+    role_id = serializers.PrimaryKeyRelatedField(
+        source='role',
+        queryset=Role.objects.filter(deleted_at__isnull=True),
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'full_name', 'telephone', 'role_id']
+        read_only_fields = ['id']
+
+    def update(self, instance, validated_data):
+        # `role` is provided via `role_id` (source='role') and will appear
+        # in validated_data as the Role instance. Apply it explicitly.
+        role_val = validated_data.pop('role', None)
+
+        # Update simple fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        # Apply role if provided (may be None to unset)
+        try:
+            old_role = getattr(instance, 'role', None)
+            old_role_id = getattr(old_role, 'id', None)
+            old_role_name = getattr(old_role, 'name', None)
+
+            if role_val is not None:
+                new_role_id = getattr(role_val, 'id', None)
+                new_role_name = getattr(role_val, 'name', None)
+            else:
+                new_role_id = None
+                new_role_name = None
+
+            logger.info(
+                "Updating user id=%s: old_role=(%s,%s) -> new_role=(%s,%s)",
+                getattr(instance, 'id', None),
+                old_role_id,
+                old_role_name,
+                new_role_id,
+                new_role_name,
+            )
+
+            if role_val is not None:
+                instance.role = role_val
+
+            # Persist changes. Because this is a legacy unmanaged model, do a
+            # full save. We save all fields that changed.
+            instance.save()
+            logger.debug("User id=%s updated successfully", getattr(instance, 'id', None))
+        except Exception:
+            logger.exception("Failed updating user id=%s", getattr(instance, 'id', None))
+            raise
+
+        return instance

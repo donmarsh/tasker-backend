@@ -26,7 +26,11 @@ class TaskViewSet(viewsets.ModelViewSet):
         if user and getattr(user, 'is_authenticated', False):
             owner_id = getattr(user, 'id', None)
             try:
-                is_admin = user.userrole_set.filter(deleted_at__isnull=True, role__name__iexact='admin').exists()
+                role = getattr(user, 'role', None)
+                if role is not None and getattr(role, 'deleted_at', None) is None:
+                    is_admin = str(getattr(role, 'name', '')).lower() == 'admin'
+                else:
+                    is_admin = False
             except Exception:
                 is_admin = False
         else:
@@ -40,11 +44,20 @@ class TaskViewSet(viewsets.ModelViewSet):
                     payload = getattr(token, 'payload', None) or {}
 
                 owner_id = payload.get('user_id')
-                roles = payload.get('roles') or []
-                if isinstance(roles, (list, tuple)):
-                    is_admin = any(str(r).lower() == 'admin' for r in roles)
-                elif isinstance(roles, str):
-                    is_admin = roles.lower() == 'admin'
+                # Prefer single `role` object in token payload
+                role_obj = payload.get('role')
+                if isinstance(role_obj, dict):
+                    name = role_obj.get('role_name') or role_obj.get('name')
+                    is_admin = str(name or '').lower() == 'admin'
+                elif isinstance(role_obj, str):
+                    is_admin = role_obj.lower() == 'admin'
+                else:
+                    # Backwards-compat: look for `roles` array
+                    roles = payload.get('roles') or []
+                    if isinstance(roles, (list, tuple)):
+                        is_admin = any(str(r).lower() == 'admin' for r in roles)
+                    elif isinstance(roles, str):
+                        is_admin = roles.lower() == 'admin'
 
         base_qs = Task.objects.filter(deleted_at__isnull=True).select_related('status', 'assignee', 'project')
 
