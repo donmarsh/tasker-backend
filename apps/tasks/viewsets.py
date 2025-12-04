@@ -61,6 +61,55 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         base_qs = Task.objects.filter(deleted_at__isnull=True).select_related('status', 'assignee', 'project')
 
+        # Support optional filtering by ?user_id=<id>
+        user_id_param = self.request.query_params.get('user_id')
+        if user_id_param is not None:
+            try:
+                uid = int(user_id_param)
+            except (TypeError, ValueError):
+                return Task.objects.none()
+
+            # If caller is admin or manager allow fetching tasks for that user
+            if is_admin:
+                return base_qs.filter(assignee__id=uid)
+
+            # If we have a resolved role variable from request.user above,
+            # check for manager role as well. If not populated, try payload.
+            is_manager = False
+            try:
+                if user and getattr(user, 'is_authenticated', False):
+                    role = getattr(user, 'role', None)
+                    if role is not None and getattr(role, 'deleted_at', None) is None:
+                        is_manager = str(getattr(role, 'name', '')).lower() == 'manager'
+                else:
+                    payload = None
+                    token = getattr(self.request, 'auth', None)
+                    if token is not None:
+                        if isinstance(token, dict):
+                            payload = token
+                        else:
+                            payload = getattr(token, 'payload', None) or {}
+
+                    role_obj = (payload or {}).get('role') if payload is not None else None
+                    if isinstance(role_obj, dict):
+                        name = role_obj.get('role_name') or role_obj.get('name')
+                        is_manager = str(name or '').lower() == 'manager'
+                    elif isinstance(role_obj, str):
+                        is_manager = role_obj.lower() == 'manager'
+            except Exception:
+                is_manager = False
+
+            if is_manager:
+                return base_qs.filter(assignee__id=uid)
+
+            # If caller is a normal user, only allow if uid matches owner's id
+            if owner_id is not None and owner_id == uid:
+                return base_qs.filter(assignee__id=owner_id)
+
+            # Unauthorized to view other user's tasks
+            return Task.objects.none()
+
+        # No user_id param: preserve previous behavior
         if is_admin:
             return base_qs
 
@@ -101,6 +150,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     # support filtering by related project id via `?project_id=<id>`
     class TaskFilter(dj_filters.FilterSet):
         project_id = dj_filters.NumberFilter(field_name='project__id', lookup_expr='exact')
+        user_id = dj_filters.NumberFilter(field_name='assignee__id', lookup_expr='exact')
 
         class Meta:
             model = Task
