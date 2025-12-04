@@ -1,6 +1,6 @@
 # apps/accounts/urls.py
 from django.urls import path
-from .views import MyTokenObtainPairView, logout_view, RegisterView
+from .views import MyTokenObtainPairView, logout_view, RegisterView, ChangePasswordView
 from .views import csrf_view
 from .views import UserList, UserDetail
 from .views import RoleList, RoleDetail
@@ -14,6 +14,7 @@ urlpatterns = [
     path('users/<int:pk>/', UserDetail.as_view(), name='user-detail'),
     # Singular route for compatibility: allow PATCH/PUT at /user/<id>/
     path('user/<int:pk>/', UserDetail.as_view(), name='user-update'),
+    path('user/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('roles/', RoleList.as_view(), name='role-list'),
     path('roles/<int:pk>/', RoleDetail.as_view(), name='role-detail'),
 ]
