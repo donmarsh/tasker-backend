@@ -10,6 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status as http_status
 from apps.tasks.models import TaskStatus
+from rest_framework.exceptions import PermissionDenied
 
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
@@ -21,18 +22,19 @@ class TaskViewSet(viewsets.ModelViewSet):
         # them. Prefer `request.user` but fall back to JWT token payload.
         user = getattr(self.request, 'user', None)
         owner_id = None
-        is_admin = False
+        is_privileged = False  # admin or manager
 
         if user and getattr(user, 'is_authenticated', False):
             owner_id = getattr(user, 'id', None)
             try:
                 role = getattr(user, 'role', None)
                 if role is not None and getattr(role, 'deleted_at', None) is None:
-                    is_admin = str(getattr(role, 'name', '')).lower() == 'admin'
+                    name = str(getattr(role, 'name', '')).lower()
+                    is_privileged = name in ('admin', 'manager')
                 else:
-                    is_admin = False
+                    is_privileged = False
             except Exception:
-                is_admin = False
+                is_privileged = False
         else:
             token = getattr(self.request, 'auth', None)
             if token is not None:
@@ -48,16 +50,16 @@ class TaskViewSet(viewsets.ModelViewSet):
                 role_obj = payload.get('role')
                 if isinstance(role_obj, dict):
                     name = role_obj.get('role_name') or role_obj.get('name')
-                    is_admin = str(name or '').lower() == 'admin'
+                    is_privileged = str(name or '').lower() in ('admin', 'manager')
                 elif isinstance(role_obj, str):
-                    is_admin = role_obj.lower() == 'admin'
+                    is_privileged = role_obj.lower() in ('admin', 'manager')
                 else:
                     # Backwards-compat: look for `roles` array
                     roles = payload.get('roles') or []
                     if isinstance(roles, (list, tuple)):
-                        is_admin = any(str(r).lower() == 'admin' for r in roles)
+                        is_privileged = any(str(r).lower() in ('admin', 'manager') for r in roles)
                     elif isinstance(roles, str):
-                        is_admin = roles.lower() == 'admin'
+                        is_privileged = roles.lower() in ('admin', 'manager')
 
         base_qs = Task.objects.filter(deleted_at__isnull=True).select_related('status', 'assignee', 'project')
 
@@ -69,9 +71,12 @@ class TaskViewSet(viewsets.ModelViewSet):
             except (TypeError, ValueError):
                 return Task.objects.none()
 
-            # If caller is admin or manager allow fetching tasks for that user
-            if is_admin:
-                return base_qs.filter(assignee__id=uid)
+                # If caller is admin or manager allow fetching tasks for that user
+                if is_privileged:
+                    # When filtering by a specific assignee id, exclude tasks
+                    # that have no assignee (assignee is NULL) so they aren't
+                    # returned for an explicit `user_id`/`assignee_id` query.
+                    return base_qs.filter(assignee__id=uid, assignee__isnull=False)
 
             # If we have a resolved role variable from request.user above,
             # check for manager role as well. If not populated, try payload.
@@ -100,7 +105,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 is_manager = False
 
             if is_manager:
-                return base_qs.filter(assignee__id=uid)
+                return base_qs.filter(assignee__id=uid, assignee__isnull=False)
 
             # If caller is a normal user, only allow if uid matches owner's id
             if owner_id is not None and owner_id == uid:
@@ -110,7 +115,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             return Task.objects.none()
 
         # No user_id param: preserve previous behavior
-        if is_admin:
+        if is_privileged:
             return base_qs
 
         if owner_id is not None:
@@ -151,12 +156,72 @@ class TaskViewSet(viewsets.ModelViewSet):
     class TaskFilter(dj_filters.FilterSet):
         project_id = dj_filters.NumberFilter(field_name='project__id', lookup_expr='exact')
         user_id = dj_filters.NumberFilter(field_name='assignee__id', lookup_expr='exact')
+        assignee_id = dj_filters.NumberFilter(field_name='assignee__id', lookup_expr='exact')
 
         class Meta:
             model = Task
-            fields = ['status', 'assignee', 'project', 'project_id']
+            fields = ['status', 'assignee', 'project', 'project_id', 'user_id', 'assignee_id']
 
     filterset_class = TaskFilter
     search_fields = ['title', 'description']
     ordering_fields = ['deadline', 'created_at']
     ordering = ['-created_at']
+
+    def retrieve(self, request, pk=None):
+        """Return a single Task if the caller is admin/manager or the assignee.
+
+        Admins/managers may view any task. Regular users may view only tasks
+        where their token `user_id` equals the task's assignee id.
+        """
+        task = self.get_object()
+
+        # Inspect token payload first
+        token = getattr(request, 'auth', None)
+        payload = None
+        if token is not None:
+            if isinstance(token, dict):
+                payload = token
+            else:
+                payload = getattr(token, 'payload', None) or {}
+
+        # Check role from token (prefer single `role` object)
+        is_privileged = False
+        if payload is not None:
+            role_obj = payload.get('role')
+            if isinstance(role_obj, dict):
+                name = role_obj.get('role_name') or role_obj.get('name')
+                if name and str(name).lower() in ('admin', 'manager'):
+                    is_privileged = True
+            elif isinstance(role_obj, str) and role_obj.lower() in ('admin', 'manager'):
+                is_privileged = True
+
+            # Backwards-compat: check `roles` array
+            roles = payload.get('roles') or []
+            if isinstance(roles, (list, tuple)) and any(str(r).lower() in ('admin', 'manager') for r in roles):
+                is_privileged = True
+            elif isinstance(roles, str) and roles.lower() in ('admin', 'manager'):
+                is_privileged = True
+
+        if is_privileged:
+            return Response(TaskSerializer(task, context={'request': request}).data)
+
+        # Not privileged: verify user identity matches assignee
+        token_user_id = None
+        if payload is not None:
+            token_user_id = payload.get('user_id')
+
+        if token_user_id is None:
+            user = getattr(request, 'user', None)
+            if user and getattr(user, 'is_authenticated', False):
+                token_user_id = getattr(user, 'id', None)
+
+        assignee = getattr(task, 'assignee', None)
+        assignee_id = getattr(assignee, 'id', None) if assignee is not None else None
+
+        try:
+            if token_user_id is not None and assignee_id is not None and int(token_user_id) == int(assignee_id):
+                return Response(TaskSerializer(task, context={'request': request}).data)
+        except Exception:
+            pass
+
+        raise PermissionDenied(detail='Not authorized to view this task')

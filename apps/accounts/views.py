@@ -17,7 +17,7 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 from rest_framework import generics
 from .serializers import UserSerializer
-from .permissions import IsAdminRole
+from .permissions import IsAdminRole, IsAdminOrManagerRole
 from .serializers import RoleSerializer
 from apps.accounts.models import Role
 class RegisterView(generics.CreateAPIView):
@@ -38,7 +38,10 @@ class RegisterView(generics.CreateAPIView):
 
         if User.objects.filter(email=email).exists():
             return Response({"error": "Email already exists"}, status=status.HTTP_400_BAD_REQUEST)
-
+        
+        role_id = request.data.get('role_id')
+        if not role_id:
+            role_id = 3
         # Create user with hashed password
         user = User(
             username=username,
@@ -46,14 +49,13 @@ class RegisterView(generics.CreateAPIView):
             full_name=full_name,
             telephone=telephone,
             password=make_password(password),  # ← Django hashes it
-            created_at=timezone.now()  # or use NOW() in DB trigger
+            created_at=timezone.now(),  # or use NOW() in DB trigger
+            role_id=role_id
         )
         user.save()
 
         # Assign role on the user (single-role model)
-        role_id = request.data.get('role_id')
-        if not role_id:
-            role_id = 3
+        
         try:
             role_obj = Role.objects.get(pk=role_id)
             user.role = role_obj
@@ -166,7 +168,8 @@ def csrf_view(request):
 
 class UserList(generics.ListAPIView):
     """List users. Requires admin role."""
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    # Allow admins and managers to list users
+    permission_classes = [IsAuthenticated, IsAdminOrManagerRole]
     serializer_class = UserSerializer
 
     def get_queryset(self):
