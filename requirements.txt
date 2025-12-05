@@ -9,3 +9,5 @@ pillow==12.0.0
 PyJWT==2.10.1
 python-decouple==3.8
 sqlparse==0.5.4
+gunicorn==24.0.0
+
