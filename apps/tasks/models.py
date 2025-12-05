@@ -7,16 +7,16 @@ User = get_user_model()
 
 
 class TaskStatus(models.Model):
-    id = models.IntegerField(primary_key=True)
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=50)
-    created_at = models.DateTimeField()
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    modified_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_task_status'
         app_label = 'tasks'
-        managed = False   # ← THIS IS KEY: tells Django "don't touch this table"
+        managed = True
 
     def __str__(self):
         return self.name
@@ -27,8 +27,8 @@ class Task(models.Model):
     title = models.CharField(max_length=100)
     description = models.CharField(max_length=500)
     deadline = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    modified_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
     status = models.ForeignKey(
@@ -57,7 +57,7 @@ class Task(models.Model):
     class Meta:
         db_table = 'tbl_tasks'
         app_label = 'tasks'
-        managed = False   # ← Django won't try to create or modify this table
+        managed = True
         ordering = ['-created_at']
 
     def __str__(self):

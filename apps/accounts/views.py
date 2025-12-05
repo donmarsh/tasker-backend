@@ -190,6 +190,18 @@ class UserDetail(generics.RetrieveUpdateAPIView):
             return UserUpdateSerializer
         return UserSerializer
 
+    def delete(self, request, *args, **kwargs):
+        user_obj = self.get_object()
+        if user_obj.deleted_at is None:
+            user_obj.deleted_at = timezone.now()
+            try:
+                user_obj.save(update_fields=['deleted_at'])
+                logger.info("Soft-deleted user id=%s", getattr(user_obj, 'id', None))
+            except Exception:
+                logger.exception("Failed to soft-delete user id=%s", getattr(user_obj, 'id', None))
+                return Response({"detail": "Failed to delete user"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class RoleList(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminRole]

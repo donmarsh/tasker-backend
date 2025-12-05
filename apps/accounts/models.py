@@ -37,7 +37,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=256)
     created_at = models.DateTimeField()
     deleted_at = models.DateTimeField(null=True, blank=True)
-    modified_at = models.DateTimeField(auto_now=True)
+    modified_at = models.DateTimeField(null=True, blank=True)
 
     # Expose auth attributes as properties so Django's authentication
     # treats legacy rows correctly (without changing DB schema).
@@ -65,7 +65,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = 'tbl_users'
-        managed = False   # ← CRITICAL: Django never touches this table
+        managed = True
         app_label = 'accounts'
 
     def __str__(self):
@@ -74,58 +74,32 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 # Your real roles & permissions
 class Role(models.Model):
-    id = models.IntegerField(primary_key=True)
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100, unique=True)
-    created_at = models.DateTimeField()
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    modified_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_roles'
-        managed = False
+        managed = True
         app_label = 'accounts'
 
     def __str__(self):
         return self.name
 
-
-class Permission(models.Model):
-    id = models.IntegerField(primary_key=True)
-    name = models.CharField(max_length=100, unique=True)
-    created_at = models.DateTimeField()
-    modified_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = 'tbl_permissions'
-        managed = False
-        app_label = 'accounts'
-
-
 class UserRole(models.Model):
     id = models.IntegerField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
     role = models.ForeignKey(Role, on_delete=models.CASCADE, db_column='role_id')
-    created_at = models.DateTimeField()
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    modified_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_user_roles'
-        managed = False
+        managed = True
         app_label = 'accounts'
         unique_together = ('user', 'role')
 
 
-class RolePermission(models.Model):
-    id = models.IntegerField(primary_key=True)
-    role = models.ForeignKey(Role, on_delete=models.CASCADE, db_column='role_id')
-    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, db_column='permission_id')
-    created_at = models.DateTimeField()
-    modified_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = 'tbl_role_permissions'
-        managed = False
-        app_label = 'accounts'
