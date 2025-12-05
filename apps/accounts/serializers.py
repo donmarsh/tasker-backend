@@ -1,6 +1,7 @@
 # apps/accounts/serializers.py
 import logging
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from apps.accounts.models import Role
@@ -33,20 +34,26 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # If email provided and username missing, resolve username
         if 'email' in attrs and not attrs.get(username_field):
+            email_value = attrs['email']
             try:
-                user = User.objects.get(email=attrs['email'])
+                user = User.objects.get(email__iexact=email_value)
                 attrs[username_field] = getattr(user, username_field)
             except User.DoesNotExist:
-                # leave attrs alone; parent will raise invalid credentials
-                pass
+                # fall back to using the email as username input so parent
+                # serializer still sees credentials and returns invalid login
+                attrs[username_field] = email_value
 
         # If username field contains an email, resolve it to actual username
         if username_field in attrs and attrs.get(username_field) and '@' in str(attrs.get(username_field)):
             try:
-                user = User.objects.get(email=attrs[username_field])
+                user = User.objects.get(email__iexact=attrs[username_field])
                 attrs[username_field] = getattr(user, username_field)
             except User.DoesNotExist:
-                pass
+                # Leave as-is so parent serializer produces invalid creds
+                attrs[username_field] = attrs[username_field]
+
+        if not attrs.get(username_field):
+            raise ValidationError({'detail': 'Provide either username or email.'})
 
         data = super().validate(attrs)
 
